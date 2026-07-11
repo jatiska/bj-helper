@@ -25,7 +25,7 @@ import {
   splitHand,
   type PlayerHand,
 } from './lib/playerHands';
-import { parseKeyboardAction, type PickerMode } from './lib/keyboard';
+import { parseKeyboardAction, getPickerModes, type PickerMode } from './lib/keyboard';
 import { CardPicker } from './components/CardPicker';
 import { HandDisplay } from './components/HandDisplay';
 import { StrategyPanel } from './components/StrategyPanel';
@@ -47,6 +47,7 @@ export default function App() {
   const [activeHandIndex, setActiveHandIndex] = useState(0);
   const [dealerUpcard, setDealerUpcard] = useState<Card | null>(null);
   const [dealerHole, setDealerHole] = useState<Card | null>(null);
+  const [dealerHits, setDealerHits] = useState<Card[]>([]);
   const [countState, setCountState] = useState<CountState>(initialCountState(6));
   const [baseUnit, setBaseUnit] = useState(10);
   const [surrenderAllowed, setSurrenderAllowed] = useState(true);
@@ -60,6 +61,16 @@ export default function App() {
   const playerAnalysis = useMemo(
     () => analyzeHand(activeCards),
     [activeCards],
+  );
+
+  const dealerCards = useMemo(() => {
+    if (!dealerUpcard) return [];
+    return [dealerUpcard, ...(dealerHole ? [dealerHole, ...dealerHits] : [])];
+  }, [dealerUpcard, dealerHole, dealerHits]);
+
+  const dealerAnalysis = useMemo(
+    () => (dealerUpcard ? analyzeHand(dealerCards) : null),
+    [dealerUpcard, dealerCards],
   );
 
   const trueCount = useMemo(
@@ -150,21 +161,43 @@ export default function App() {
   const setDealer = useCallback(
     (rank: Rank) => {
       if (dealerUpcard) untrackCard(dealerUpcard.rank);
+      dealerHits.forEach((c) => untrackCard(c.rank));
+      if (dealerHole) untrackCard(dealerHole.rank);
       trackCard(rank);
       setDealerUpcard(withSuit(rank));
       setDealerHole(null);
+      setDealerHits([]);
     },
-    [dealerUpcard, trackCard, untrackCard],
+    [dealerUpcard, dealerHole, dealerHits, trackCard, untrackCard],
   );
 
   const revealHole = useCallback(
     (rank: Rank) => {
       if (dealerHole) untrackCard(dealerHole.rank);
+      dealerHits.forEach((c) => untrackCard(c.rank));
       trackCard(rank);
       setDealerHole(withSuit(rank));
+      setDealerHits([]);
+      setPickerMode('dealerHit');
     },
-    [dealerHole, trackCard, untrackCard],
+    [dealerHole, dealerHits, trackCard, untrackCard],
   );
+
+  const addDealerHit = useCallback(
+    (rank: Rank) => {
+      if (!dealerHole) return;
+      trackCard(rank);
+      setDealerHits((prev) => [...prev, withSuit(rank)]);
+    },
+    [dealerHole, trackCard],
+  );
+
+  const removeDealerHit = useCallback(() => {
+    if (dealerHits.length === 0) return;
+    const last = dealerHits[dealerHits.length - 1];
+    untrackCard(last.rank);
+    setDealerHits((prev) => prev.slice(0, -1));
+  }, [dealerHits, untrackCard]);
 
   const performSplit = useCallback(() => {
     const result = splitHand(playerHands, activeHandIndex);
@@ -201,6 +234,7 @@ export default function App() {
     setActiveHandIndex(0);
     setDealerUpcard(null);
     setDealerHole(null);
+    setDealerHits([]);
     setPickerMode('dealer');
   }, []);
 
@@ -247,14 +281,26 @@ export default function App() {
         revealHole(rank);
         return;
       }
+      if (pickerMode === 'dealerHit') {
+        addDealerHit(rank);
+        return;
+      }
       addPlayerCardWithInit(rank);
     },
-    [dealerUpcard, pickerMode, setDealer, revealHole, addPlayerCardWithInit],
+    [dealerUpcard, pickerMode, setDealer, revealHole, addDealerHit, addPlayerCardWithInit],
   );
+
+  const handleUndo = useCallback(() => {
+    if (pickerMode === 'dealerHit') {
+      removeDealerHit();
+      return;
+    }
+    removePlayerCard();
+  }, [pickerMode, removeDealerHit, removePlayerCard]);
 
   const cyclePickerMode = useCallback(() => {
     if (!dealerUpcard) return;
-    const modes: PickerMode[] = dealerHole ? ['player', 'dealer'] : ['player', 'hole', 'dealer'];
+    const modes = getPickerModes(!!dealerHole);
     const idx = modes.indexOf(pickerMode);
     setPickerMode(modes[(idx + 1) % modes.length]);
   }, [dealerUpcard, dealerHole, pickerMode]);
@@ -291,7 +337,7 @@ export default function App() {
           break;
         case 'undo':
           e.preventDefault();
-          removePlayerCard();
+          handleUndo();
           break;
         case 'newHand':
           e.preventDefault();
@@ -333,7 +379,7 @@ export default function App() {
     canSplitActive,
     playerHands.length,
     handleRankInput,
-    removePlayerCard,
+    handleUndo,
     newHand,
     newShoe,
     cyclePickerMode,
@@ -373,13 +419,9 @@ export default function App() {
           <div className="hands">
             <HandDisplay
               title="Dealer"
-              cards={dealerUpcard ? [dealerUpcard, ...(dealerHole ? [dealerHole] : [])] : []}
+              cards={dealerCards}
               hiddenCount={dealerUpcard && !dealerHole ? 1 : 0}
-              analysis={
-                dealerUpcard
-                  ? analyzeHand(dealerHole ? [dealerUpcard, dealerHole] : [dealerUpcard])
-                  : null
-              }
+              analysis={dealerAnalysis}
               highlight={false}
             />
 
@@ -438,12 +480,14 @@ export default function App() {
             onSelectPlayer={addPlayerCardWithInit}
             onSelectDealer={setDealer}
             onRevealHole={revealHole}
-            onUndo={removePlayerCard}
+            onSelectDealerHit={addDealerHit}
+            onUndo={handleUndo}
             onSplit={performSplit}
             onStand={performStand}
             hasDealer={dealerUpcard !== null}
             hasHole={dealerHole !== null}
             playerCount={activeCards.length}
+            dealerHitCount={dealerHits.length}
             canSplit={!!canSplitActive}
           />
 
@@ -510,7 +554,7 @@ export default function App() {
               <li>Enter dealer upcard, then your cards (keyboard or clicks).</li>
               <li>Press <kbd>P</kbd> to split, <kbd>Space</kbd> to stand / next hand.</li>
               <li>Follow the recommendation — gold border means a count deviation.</li>
-              <li>Enter hole card after the round for accurate counting.</li>
+              <li>Enter hole card after the round, then use <strong>Dealer hits</strong> for extra cards.</li>
             </ol>
           </div>
         </aside>

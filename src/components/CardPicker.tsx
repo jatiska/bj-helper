@@ -1,5 +1,5 @@
 import { type Rank, RANKS } from '../lib/cards';
-import { type PickerMode } from '../lib/keyboard';
+import { getPickerModes, type PickerMode } from '../lib/keyboard';
 
 interface CardPickerProps {
   mode: PickerMode;
@@ -7,12 +7,14 @@ interface CardPickerProps {
   onSelectPlayer: (rank: Rank) => void;
   onSelectDealer: (rank: Rank) => void;
   onRevealHole: (rank: Rank) => void;
+  onSelectDealerHit: (rank: Rank) => void;
   onUndo: () => void;
   onSplit?: () => void;
   onStand?: () => void;
   hasDealer: boolean;
   hasHole: boolean;
   playerCount: number;
+  dealerHitCount: number;
   canSplit: boolean;
 }
 
@@ -22,12 +24,14 @@ export function CardPicker({
   onSelectPlayer,
   onSelectDealer,
   onRevealHole,
+  onSelectDealerHit,
   onUndo,
   onSplit,
   onStand,
   hasDealer,
   hasHole,
   playerCount,
+  dealerHitCount,
   canSplit,
 }: CardPickerProps) {
   const effectiveMode: PickerMode = !hasDealer ? 'dealer' : mode;
@@ -38,7 +42,9 @@ export function CardPicker({
       onModeChange('player');
     } else if (effectiveMode === 'hole') {
       onRevealHole(rank);
-      onModeChange('player');
+      onModeChange('dealerHit');
+    } else if (effectiveMode === 'dealerHit') {
+      onSelectDealerHit(rank);
     } else {
       onSelectPlayer(rank);
     }
@@ -49,14 +55,20 @@ export function CardPicker({
       ? 'Select dealer upcard'
       : effectiveMode === 'hole'
         ? 'Select dealer hole card'
-        : 'Add cards to your hand';
+        : effectiveMode === 'dealerHit'
+          ? 'Add dealer hit card'
+          : 'Add cards to your hand';
 
   const cycleMode = () => {
     if (!hasDealer) return;
-    const modes: PickerMode[] = hasHole ? ['player', 'dealer'] : ['player', 'hole', 'dealer'];
+    const modes = getPickerModes(hasHole);
     const idx = modes.indexOf(effectiveMode);
     onModeChange(modes[(idx + 1) % modes.length]);
   };
+
+  const canUndo =
+    (effectiveMode === 'player' && playerCount > 0) ||
+    (effectiveMode === 'dealerHit' && dealerHitCount > 0);
 
   return (
     <div className="card-picker">
@@ -81,6 +93,15 @@ export function CardPicker({
                   Hole card
                 </button>
               )}
+              {hasHole && (
+                <button
+                  type="button"
+                  className={`mode-tab ${effectiveMode === 'dealerHit' ? 'active' : ''}`}
+                  onClick={() => onModeChange('dealerHit')}
+                >
+                  Dealer hits
+                </button>
+              )}
               <button
                 type="button"
                 className={`mode-tab ${effectiveMode === 'dealer' ? 'active' : ''}`}
@@ -102,7 +123,7 @@ export function CardPicker({
               Stand
             </button>
           )}
-          {playerCount > 0 && effectiveMode === 'player' && (
+          {canUndo && (
             <button type="button" className="btn btn-sm btn-ghost" onClick={onUndo}>
               Undo
             </button>
