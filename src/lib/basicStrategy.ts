@@ -11,6 +11,8 @@ export interface StrategyResult {
   action: StrategyAction;
   reason: string;
   fallback?: string;
+  isDeviation?: boolean;
+  index?: number;
 }
 
 type DealerUp = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'A';

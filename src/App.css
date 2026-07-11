@@ -144,6 +144,44 @@
   box-shadow: inset 0 0 0 1px rgba(62, 207, 142, 0.1);
 }
 
+.hand-display--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.25);
+}
+
+.hand-display--done {
+  opacity: 0.65;
+}
+
+.hand-display--clickable {
+  cursor: pointer;
+}
+
+.hand-display--clickable:hover {
+  border-color: #3d4f63;
+}
+
+.hand-status {
+  margin-left: 0.5rem;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.hand-status--stood { background: rgba(62, 207, 142, 0.15); color: var(--accent); }
+.hand-status--doubled { background: rgba(232, 196, 104, 0.15); color: var(--gold); }
+.hand-status--bust { background: rgba(240, 113, 120, 0.15); color: var(--red); }
+.hand-status--blackjack { background: rgba(232, 196, 104, 0.2); color: var(--gold); }
+
+.split-hands {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .hand-display-header {
   display: flex;
   justify-content: space-between;
@@ -281,6 +319,125 @@
 .strategy-panel.action-double { border-color: rgba(232, 196, 104, 0.4); }
 .strategy-panel.action-split { border-color: rgba(199, 146, 234, 0.4); }
 .strategy-panel.action-surrender { border-color: rgba(255, 173, 102, 0.4); }
+
+.strategy-panel--deviation {
+  border-color: rgba(232, 196, 104, 0.5) !important;
+  background: rgba(232, 196, 104, 0.06);
+}
+
+.strategy-panel--complete {
+  border-color: rgba(62, 207, 142, 0.3);
+  color: var(--text-muted);
+}
+
+/* Insurance */
+.insurance-panel {
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+}
+
+.insurance-panel--take {
+  border-color: rgba(232, 196, 104, 0.4);
+  background: rgba(232, 196, 104, 0.08);
+}
+
+.insurance-panel--decline {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+}
+
+.insurance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.insurance-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.insurance-verdict {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.insurance-verdict.take { color: var(--gold); }
+.insurance-verdict.decline { color: var(--text-muted); }
+
+.insurance-reason {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Buttons */
+.btn-accent {
+  background: rgba(62, 207, 142, 0.15);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.btn-accent:hover {
+  background: rgba(62, 207, 142, 0.25);
+}
+
+.btn-double-confirm {
+  width: 100%;
+  padding: 0.65rem;
+  font-size: 0.85rem;
+}
+
+/* Keyboard */
+.keyboard-hints {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  border: 1px solid var(--border);
+}
+
+.keyboard-hints h3 {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.keyboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.keyboard-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.keyboard-hint kbd,
+.header kbd,
+.help-card kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.35rem;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.header kbd {
+  margin-left: 0.35rem;
+  opacity: 0.6;
+}
 
 /* Card picker */
 .card-picker {

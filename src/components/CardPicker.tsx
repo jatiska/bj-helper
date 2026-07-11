@@ -1,36 +1,44 @@
-import { useState } from 'react';
 import { type Rank, RANKS } from '../lib/cards';
+import { type PickerMode } from '../lib/keyboard';
 
 interface CardPickerProps {
+  mode: PickerMode;
+  onModeChange: (mode: PickerMode) => void;
   onSelectPlayer: (rank: Rank) => void;
   onSelectDealer: (rank: Rank) => void;
   onRevealHole: (rank: Rank) => void;
   onUndo: () => void;
+  onSplit?: () => void;
+  onStand?: () => void;
   hasDealer: boolean;
   hasHole: boolean;
   playerCount: number;
+  canSplit: boolean;
 }
 
 export function CardPicker({
+  mode,
+  onModeChange,
   onSelectPlayer,
   onSelectDealer,
   onRevealHole,
   onUndo,
+  onSplit,
+  onStand,
   hasDealer,
   hasHole,
   playerCount,
+  canSplit,
 }: CardPickerProps) {
-  const [mode, setMode] = useState<'player' | 'dealer' | 'hole'>('dealer');
-
-  const effectiveMode = !hasDealer ? 'dealer' : mode;
+  const effectiveMode: PickerMode = !hasDealer ? 'dealer' : mode;
 
   const handleClick = (rank: Rank) => {
     if (effectiveMode === 'dealer') {
       onSelectDealer(rank);
-      setMode('player');
+      onModeChange('player');
     } else if (effectiveMode === 'hole') {
       onRevealHole(rank);
-      setMode('player');
+      onModeChange('player');
     } else {
       onSelectPlayer(rank);
     }
@@ -43,6 +51,13 @@ export function CardPicker({
         ? 'Select dealer hole card'
         : 'Add cards to your hand';
 
+  const cycleMode = () => {
+    if (!hasDealer) return;
+    const modes: PickerMode[] = hasHole ? ['player', 'dealer'] : ['player', 'hole', 'dealer'];
+    const idx = modes.indexOf(effectiveMode);
+    onModeChange(modes[(idx + 1) % modes.length]);
+  };
+
   return (
     <div className="card-picker">
       <div className="picker-header">
@@ -53,7 +68,7 @@ export function CardPicker({
               <button
                 type="button"
                 className={`mode-tab ${effectiveMode === 'player' ? 'active' : ''}`}
-                onClick={() => setMode('player')}
+                onClick={() => onModeChange('player')}
               >
                 Your cards
               </button>
@@ -61,7 +76,7 @@ export function CardPicker({
                 <button
                   type="button"
                   className={`mode-tab ${effectiveMode === 'hole' ? 'active' : ''}`}
-                  onClick={() => setMode('hole')}
+                  onClick={() => onModeChange('hole')}
                 >
                   Hole card
                 </button>
@@ -69,7 +84,7 @@ export function CardPicker({
               <button
                 type="button"
                 className={`mode-tab ${effectiveMode === 'dealer' ? 'active' : ''}`}
-                onClick={() => setMode('dealer')}
+                onClick={() => onModeChange('dealer')}
               >
                 Change upcard
               </button>
@@ -77,9 +92,24 @@ export function CardPicker({
           )}
         </div>
         <div className="picker-actions">
+          {canSplit && onSplit && (
+            <button type="button" className="btn btn-sm btn-accent" onClick={onSplit}>
+              Split (P)
+            </button>
+          )}
+          {onStand && playerCount > 0 && effectiveMode === 'player' && (
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onStand}>
+              Stand
+            </button>
+          )}
           {playerCount > 0 && effectiveMode === 'player' && (
             <button type="button" className="btn btn-sm btn-ghost" onClick={onUndo}>
-              Undo last
+              Undo
+            </button>
+          )}
+          {hasDealer && (
+            <button type="button" className="btn btn-sm btn-ghost" onClick={cycleMode} title="Tab">
+              ⇥ Mode
             </button>
           )}
         </div>
