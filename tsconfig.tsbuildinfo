@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/CardPicker.tsx","./src/components/CountPanel.tsx","./src/components/HandDisplay.tsx","./src/components/StrategyPanel.tsx","./src/lib/basicStrategy.ts","./src/lib/cardCounting.ts","./src/lib/cards.ts","./src/lib/handEvaluation.ts"],"version":"5.8.3"}
