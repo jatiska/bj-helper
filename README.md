@@ -29,10 +29,9 @@ Open [http://localhost:5173](http://localhost:5173) in a browser window next to 
 2. When a hand is dealt, tap the **dealer upcard**, then your **player cards**.
 3. Follow the large **Recommended** action before clicking on the casino site.
 4. Press **P** to split, **Space** to stand / advance to the next split hand.
-5. Gold-bordered recommendations are **count deviations** (toggle in settings).
+5. After the round, enter the **hole card**, then switch to **Dealer hits** for each extra card drawn.
 6. When dealer shows Ace, check the **Insurance** panel (take at TC ≥ +3).
-7. After the round, optionally enter the **hole card** for accurate counting.
-8. Use the **true count** panel to adjust bet size between hands.
+7. Use the **true count** panel to adjust bet size between hands.
 
 ## Keyboard shortcuts
 

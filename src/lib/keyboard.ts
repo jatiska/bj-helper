@@ -17,7 +17,12 @@ const RANK_KEY_MAP: Record<string, Rank> = {
   a: 'A',
 };
 
-export type PickerMode = 'player' | 'dealer' | 'hole';
+export type PickerMode = 'player' | 'dealer' | 'hole' | 'dealerHit';
+
+export function getPickerModes(hasHole: boolean): PickerMode[] {
+  if (!hasHole) return ['player', 'hole', 'dealer'];
+  return ['player', 'dealerHit', 'dealer'];
+}
 
 export interface KeyboardAction {
   type: 'rank' | 'undo' | 'newHand' | 'newShoe' | 'cycleMode' | 'prevHand' | 'nextHand' | 'split' | 'stand' | 'none';
@@ -90,7 +95,7 @@ export function parseKeyboardAction(
 export const KEYBOARD_HINTS = [
   { keys: '2–9, 0/T, A, J/Q/K', desc: 'Enter card rank' },
   { keys: 'Tab', desc: 'Cycle input mode' },
-  { keys: 'Bksp', desc: 'Undo last card' },
+  { keys: 'Bksp', desc: 'Undo last card in current mode' },
   { keys: 'P', desc: 'Split hand' },
   { keys: 'Space', desc: 'Stand / next hand' },
   { keys: '[ / ]', desc: 'Switch split hand' },
