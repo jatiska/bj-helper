@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Card, type Rank, type Suit, SUITS } from './lib/cards';
-import { analyzeHand, canDouble, canSplit } from './lib/handEvaluation';
-import { getBasicStrategy } from './lib/basicStrategy';
+import { analyzeHand } from './lib/handEvaluation';
+import { getInsuranceAdvice, getStrategy } from './lib/deviations';
 import {
   addCardToCount,
   betRecommendation,
@@ -14,10 +14,24 @@ import {
   resetCount,
   type CountState,
 } from './lib/cardCounting';
+import {
+  allHandsComplete,
+  createPlayerHand,
+  findNextPlayingHand,
+  getActiveHandInput,
+  markHandDoubled,
+  markHandStood,
+  refreshHandStatus,
+  splitHand,
+  type PlayerHand,
+} from './lib/playerHands';
+import { parseKeyboardAction, type PickerMode } from './lib/keyboard';
 import { CardPicker } from './components/CardPicker';
 import { HandDisplay } from './components/HandDisplay';
 import { StrategyPanel } from './components/StrategyPanel';
 import { CountPanel } from './components/CountPanel';
+import { InsurancePanel } from './components/InsurancePanel';
+import { KeyboardHints } from './components/KeyboardHints';
 import './App.css';
 
 function randomSuit(): Suit {
@@ -29,39 +43,61 @@ function withSuit(rank: Rank): Card {
 }
 
 export default function App() {
-  const [playerCards, setPlayerCards] = useState<Card[]>([]);
+  const [playerHands, setPlayerHands] = useState<PlayerHand[]>([]);
+  const [activeHandIndex, setActiveHandIndex] = useState(0);
   const [dealerUpcard, setDealerUpcard] = useState<Card | null>(null);
   const [dealerHole, setDealerHole] = useState<Card | null>(null);
   const [countState, setCountState] = useState<CountState>(initialCountState(6));
   const [baseUnit, setBaseUnit] = useState(10);
   const [surrenderAllowed, setSurrenderAllowed] = useState(true);
+  const [deviationsEnabled, setDeviationsEnabled] = useState(true);
   const [trackCount, setTrackCount] = useState(true);
+  const [pickerMode, setPickerMode] = useState<PickerMode>('dealer');
 
-  const playerAnalysis = useMemo(() => analyzeHand(playerCards), [playerCards]);
+  const activeHand = playerHands[activeHandIndex] ?? null;
+  const activeCards = activeHand?.cards ?? [];
 
-  const strategy = useMemo(() => {
-    if (!dealerUpcard || playerCards.length === 0) return null;
-    return getBasicStrategy({
-      playerTotal: playerAnalysis.total,
-      isSoft: playerAnalysis.isSoft,
-      isPair: playerAnalysis.isPair,
-      pairRank: playerAnalysis.pairRank,
-      dealerUpcard: dealerUpcard.rank,
-      canDouble: canDouble(playerCards),
-      canSplit: canSplit(playerCards),
-      surrenderAllowed,
-    });
-  }, [dealerUpcard, playerCards, playerAnalysis, surrenderAllowed]);
+  const playerAnalysis = useMemo(
+    () => analyzeHand(activeCards),
+    [activeCards],
+  );
 
   const trueCount = useMemo(
     () => computeTrueCount(countState.runningCount, decksRemaining(countState)),
     [countState],
   );
 
+  const strategy = useMemo(() => {
+    if (!dealerUpcard || !activeHand || activeHand.status !== 'playing') return null;
+    if (activeCards.length === 0) return null;
+
+    const input = getActiveHandInput(
+      activeHand,
+      dealerUpcard.rank,
+      surrenderAllowed,
+    );
+
+    return getStrategy(input, trueCount, deviationsEnabled);
+  }, [dealerUpcard, activeHand, activeCards.length, surrenderAllowed, trueCount, deviationsEnabled]);
+
+  const insuranceAdvice = useMemo(() => {
+    if (!dealerUpcard || dealerUpcard.rank !== 'A' || dealerHole) return null;
+    return getInsuranceAdvice(trueCount);
+  }, [dealerUpcard, dealerHole, trueCount]);
+
   const betRec = useMemo(
     () => betRecommendation(trueCount, baseUnit),
     [trueCount, baseUnit],
   );
+
+  const handsComplete = allHandsComplete(playerHands);
+  const canSplitActive =
+    activeHand?.status === 'playing' &&
+    activeCards.length === 2 &&
+    (() => {
+      const [a, b] = activeCards;
+      return a.rank === b.rank || (['10', 'J', 'Q', 'K'].includes(a.rank) && ['10', 'J', 'Q', 'K'].includes(b.rank));
+    })();
 
   const trackCard = useCallback(
     (rank: Rank) => {
@@ -81,22 +117,35 @@ export default function App() {
     [trackCount],
   );
 
+  const updateHands = useCallback((updater: (hands: PlayerHand[]) => PlayerHand[]) => {
+    setPlayerHands((prev) => updater(prev).map(refreshHandStatus));
+  }, []);
+
   const addPlayerCard = useCallback(
     (rank: Rank) => {
+      if (!activeHand || activeHand.status !== 'playing') return;
       trackCard(rank);
-      setPlayerCards((prev) => [...prev, withSuit(rank)]);
+      updateHands((hands) =>
+        hands.map((h, i) =>
+          i === activeHandIndex ? { ...h, cards: [...h.cards, withSuit(rank)] } : h,
+        ),
+      );
     },
-    [trackCard],
+    [activeHand, activeHandIndex, trackCard, updateHands],
   );
 
   const removePlayerCard = useCallback(() => {
-    setPlayerCards((prev) => {
-      if (prev.length === 0) return prev;
-      const last = prev[prev.length - 1];
-      untrackCard(last.rank);
-      return prev.slice(0, -1);
-    });
-  }, [untrackCard]);
+    if (!activeHand) return;
+    const cards = activeHand.cards;
+    if (cards.length === 0) return;
+    const last = cards[cards.length - 1];
+    untrackCard(last.rank);
+    updateHands((hands) =>
+      hands.map((h, i) =>
+        i === activeHandIndex ? { ...h, cards: h.cards.slice(0, -1) } : h,
+      ),
+    );
+  }, [activeHand, activeHandIndex, untrackCard, updateHands]);
 
   const setDealer = useCallback(
     (rank: Rank) => {
@@ -117,10 +166,42 @@ export default function App() {
     [dealerHole, trackCard, untrackCard],
   );
 
+  const performSplit = useCallback(() => {
+    const result = splitHand(playerHands, activeHandIndex);
+    if (!result) return;
+    setPlayerHands(result.map(refreshHandStatus));
+    setActiveHandIndex(activeHandIndex);
+  }, [playerHands, activeHandIndex]);
+
+  const performStand = useCallback(() => {
+    if (!activeHand) return;
+
+    if (activeHand.status === 'playing') {
+      const updated = markHandStood(playerHands, activeHandIndex);
+      setPlayerHands(updated);
+      const next = findNextPlayingHand(updated, activeHandIndex + 1);
+      if (next >= 0) setActiveHandIndex(next);
+      return;
+    }
+
+    const next = findNextPlayingHand(playerHands, activeHandIndex + 1);
+    if (next >= 0) setActiveHandIndex(next);
+  }, [activeHand, activeHandIndex, playerHands]);
+
+  const applyDouble = useCallback(() => {
+    if (!activeHand || activeHand.status !== 'playing') return;
+    const updated = markHandDoubled(playerHands, activeHandIndex);
+    setPlayerHands(updated);
+    const next = findNextPlayingHand(updated, activeHandIndex + 1);
+    if (next >= 0) setActiveHandIndex(next);
+  }, [activeHand, activeHandIndex, playerHands]);
+
   const newHand = useCallback(() => {
-    setPlayerCards([]);
+    setPlayerHands([]);
+    setActiveHandIndex(0);
     setDealerUpcard(null);
     setDealerHole(null);
+    setPickerMode('dealer');
   }, []);
 
   const newShoe = useCallback(() => {
@@ -132,14 +213,140 @@ export default function App() {
     setCountState((s) => ({ ...s, decks }));
   }, []);
 
+  const ensureHandExists = useCallback(() => {
+    if (playerHands.length === 0) {
+      setPlayerHands([createPlayerHand()]);
+      setActiveHandIndex(0);
+    }
+  }, [playerHands.length]);
+
+  const addPlayerCardWithInit = useCallback(
+    (rank: Rank) => {
+      if (playerHands.length === 0) {
+        setPlayerHands([createPlayerHand([withSuit(rank)])]);
+        setActiveHandIndex(0);
+        trackCard(rank);
+        return;
+      }
+      addPlayerCard(rank);
+    },
+    [playerHands.length, addPlayerCard, trackCard],
+  );
+
+  const handleRankInput = useCallback(
+    (rank: Rank) => {
+      if (!dealerUpcard) {
+        setDealer(rank);
+        return;
+      }
+      if (pickerMode === 'dealer') {
+        setDealer(rank);
+        return;
+      }
+      if (pickerMode === 'hole') {
+        revealHole(rank);
+        return;
+      }
+      addPlayerCardWithInit(rank);
+    },
+    [dealerUpcard, pickerMode, setDealer, revealHole, addPlayerCardWithInit],
+  );
+
+  const cyclePickerMode = useCallback(() => {
+    if (!dealerUpcard) return;
+    const modes: PickerMode[] = dealerHole ? ['player', 'dealer'] : ['player', 'hole', 'dealer'];
+    const idx = modes.indexOf(pickerMode);
+    setPickerMode(modes[(idx + 1) % modes.length]);
+  }, [dealerUpcard, dealerHole, pickerMode]);
+
   const quickDeal = useCallback(
     (playerRanks: Rank[], dealerRank: Rank) => {
       newHand();
-      playerRanks.forEach((r) => addPlayerCard(r));
-      setDealer(dealerRank);
+      trackCard(dealerRank);
+      setDealerUpcard(withSuit(dealerRank));
+      const hand = createPlayerHand(playerRanks.map(withSuit));
+      playerRanks.forEach((r) => trackCard(r));
+      setPlayerHands([refreshHandStatus(hand)]);
+      setActiveHandIndex(0);
+      setPickerMode('player');
     },
-    [newHand, addPlayerCard, setDealer],
+    [newHand, trackCard],
   );
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const action = parseKeyboardAction(e, {
+        hasDealer: dealerUpcard !== null,
+        hasHole: dealerHole !== null,
+        canSplit: !!canSplitActive,
+        multiHand: playerHands.length > 1,
+      });
+
+      switch (action.type) {
+        case 'rank':
+          if (action.rank) {
+            e.preventDefault();
+            handleRankInput(action.rank);
+          }
+          break;
+        case 'undo':
+          e.preventDefault();
+          removePlayerCard();
+          break;
+        case 'newHand':
+          e.preventDefault();
+          newHand();
+          break;
+        case 'newShoe':
+          e.preventDefault();
+          newShoe();
+          break;
+        case 'cycleMode':
+          cyclePickerMode();
+          break;
+        case 'prevHand':
+          e.preventDefault();
+          setActiveHandIndex((i) => Math.max(0, i - 1));
+          break;
+        case 'nextHand':
+          e.preventDefault();
+          setActiveHandIndex((i) => Math.min(playerHands.length - 1, i + 1));
+          break;
+        case 'split':
+          e.preventDefault();
+          performSplit();
+          break;
+        case 'stand':
+          e.preventDefault();
+          performStand();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    dealerUpcard,
+    dealerHole,
+    canSplitActive,
+    playerHands.length,
+    handleRankInput,
+    removePlayerCard,
+    newHand,
+    newShoe,
+    cyclePickerMode,
+    performSplit,
+    performStand,
+  ]);
+
+  // Auto-create hand when dealer is set and user starts entering cards
+  useEffect(() => {
+    if (dealerUpcard && playerHands.length === 0 && pickerMode === 'player') {
+      ensureHandExists();
+    }
+  }, [dealerUpcard, playerHands.length, pickerMode, ensureHandExists]);
 
   return (
     <div className="app">
@@ -153,10 +360,10 @@ export default function App() {
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-ghost" onClick={newHand}>
-            New Hand
+            New Hand <kbd>N</kbd>
           </button>
           <button type="button" className="btn btn-ghost" onClick={newShoe}>
-            New Shoe
+            New Shoe <kbd>R</kbd>
           </button>
         </div>
       </header>
@@ -168,32 +375,76 @@ export default function App() {
               title="Dealer"
               cards={dealerUpcard ? [dealerUpcard, ...(dealerHole ? [dealerHole] : [])] : []}
               hiddenCount={dealerUpcard && !dealerHole ? 1 : 0}
-              analysis={dealerUpcard ? analyzeHand(dealerHole ? [dealerUpcard, dealerHole] : [dealerUpcard]) : null}
+              analysis={
+                dealerUpcard
+                  ? analyzeHand(dealerHole ? [dealerUpcard, dealerHole] : [dealerUpcard])
+                  : null
+              }
               highlight={false}
             />
-            <HandDisplay
-              title="Your Hand"
-              cards={playerCards}
-              analysis={playerCards.length > 0 ? playerAnalysis : null}
-              highlight
-            />
+
+            {playerHands.length <= 1 ? (
+              <HandDisplay
+                title="Your Hand"
+                cards={activeCards}
+                analysis={activeCards.length > 0 ? playerAnalysis : null}
+                highlight
+                active={activeHand?.status === 'playing'}
+                status={activeHand?.status ?? 'playing'}
+              />
+            ) : (
+              <div className="split-hands">
+                {playerHands.map((hand, i) => {
+                  const analysis = analyzeHand(hand.cards);
+                  return (
+                    <HandDisplay
+                      key={hand.id}
+                      title={`Hand ${i + 1}`}
+                      cards={hand.cards}
+                      analysis={hand.cards.length > 0 ? analysis : null}
+                      highlight
+                      active={i === activeHandIndex && hand.status === 'playing'}
+                      status={hand.status}
+                      onClick={() => setActiveHandIndex(i)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          <InsurancePanel
+            advice={insuranceAdvice}
+            show={dealerUpcard?.rank === 'A' && !dealerHole}
+          />
 
           <StrategyPanel
             strategy={strategy}
-            hasInput={playerCards.length > 0 && dealerUpcard !== null}
+            hasInput={activeCards.length > 0 && dealerUpcard !== null}
             isBust={playerAnalysis.isBust}
-            isBlackjack={playerAnalysis.isBlackjack}
+            isBlackjack={playerAnalysis.isBlackjack && activeHand?.status === 'blackjack'}
+            handComplete={handsComplete && playerHands.length > 0}
           />
 
+          {strategy?.action === 'DOUBLE' && activeHand?.status === 'playing' && (
+            <button type="button" className="btn btn-accent btn-double-confirm" onClick={applyDouble}>
+              Mark as doubled (add one card, then auto-stand)
+            </button>
+          )}
+
           <CardPicker
-            onSelectPlayer={addPlayerCard}
+            mode={pickerMode}
+            onModeChange={setPickerMode}
+            onSelectPlayer={addPlayerCardWithInit}
             onSelectDealer={setDealer}
             onRevealHole={revealHole}
             onUndo={removePlayerCard}
+            onSplit={performSplit}
+            onStand={performStand}
             hasDealer={dealerUpcard !== null}
             hasHole={dealerHole !== null}
-            playerCount={playerCards.length}
+            playerCount={activeCards.length}
+            canSplit={!!canSplitActive}
           />
 
           <div className="quick-scenarios">
@@ -237,18 +488,29 @@ export default function App() {
               />
               <span>Late surrender allowed</span>
             </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={deviationsEnabled}
+                onChange={(e) => setDeviationsEnabled(e.target.checked)}
+              />
+              <span>Count deviations (Illustrious 18)</span>
+            </label>
             <p className="settings-note">
-              Strategy uses standard 6-deck H17 with DAS. Adjust deck count in the counter panel.
+              Strategy uses standard 6-deck H17 with DAS. Deviations adjust plays based on true count.
             </p>
           </div>
+
+          <KeyboardHints />
 
           <div className="help-card">
             <h3>How to use</h3>
             <ol>
-              <li>Set the number of decks to match your online table.</li>
-              <li>Tap cards as they appear on screen — yours, dealer upcard, then hole card.</li>
-              <li>Follow the recommended action before you click on the casino site.</li>
-              <li>Use the count panel for bet sizing when the true count is high.</li>
+              <li>Set deck count to match your online table.</li>
+              <li>Enter dealer upcard, then your cards (keyboard or clicks).</li>
+              <li>Press <kbd>P</kbd> to split, <kbd>Space</kbd> to stand / next hand.</li>
+              <li>Follow the recommendation — gold border means a count deviation.</li>
+              <li>Enter hole card after the round for accurate counting.</li>
             </ol>
           </div>
         </aside>

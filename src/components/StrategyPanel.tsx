@@ -5,6 +5,7 @@ interface StrategyPanelProps {
   hasInput: boolean;
   isBust: boolean;
   isBlackjack: boolean;
+  handComplete?: boolean;
 }
 
 const ACTION_CLASS: Record<string, string> = {
@@ -20,6 +21,7 @@ export function StrategyPanel({
   hasInput,
   isBust,
   isBlackjack,
+  handComplete = false,
 }: StrategyPanelProps) {
   if (!hasInput) {
     return (
@@ -29,11 +31,20 @@ export function StrategyPanel({
     );
   }
 
+  if (handComplete) {
+    return (
+      <div className="strategy-panel strategy-panel--complete">
+        <span className="strategy-action action-stand">Hand done</span>
+        <p>All hands complete — enter hole card or start a new hand.</p>
+      </div>
+    );
+  }
+
   if (isBust) {
     return (
       <div className="strategy-panel strategy-panel--bust">
         <span className="strategy-action action-bust">Bust</span>
-        <p>Hand is over — start a new hand.</p>
+        <p>Hand is over — press Space to move to the next hand.</p>
       </div>
     );
   }
@@ -42,7 +53,7 @@ export function StrategyPanel({
     return (
       <div className="strategy-panel strategy-panel--blackjack">
         <span className="strategy-action action-blackjack">Blackjack!</span>
-        <p>No action needed unless dealer also shows an Ace (consider insurance is -EV).</p>
+        <p>No action needed — check insurance advice if dealer shows Ace.</p>
       </div>
     );
   }
@@ -52,9 +63,11 @@ export function StrategyPanel({
   const actionClass = ACTION_CLASS[strategy.action] ?? '';
 
   return (
-    <div className={`strategy-panel ${actionClass}`}>
+    <div className={`strategy-panel ${actionClass} ${strategy.isDeviation ? 'strategy-panel--deviation' : ''}`}>
       <div className="strategy-main">
-        <span className="strategy-label">Recommended</span>
+        <span className="strategy-label">
+          {strategy.isDeviation ? 'Count deviation' : 'Recommended'}
+        </span>
         <span className={`strategy-action ${actionClass}`}>
           {ACTION_LABELS[strategy.action]}
         </span>
