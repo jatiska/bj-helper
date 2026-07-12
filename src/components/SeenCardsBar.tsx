@@ -1,5 +1,4 @@
 import { type Rank, RANKS } from '../lib/cards';
-import { hiLoValue } from '../lib/cardCounting';
 
 interface SeenCardsBarProps {
   onMarkSeen: (rank: Rank) => void;
@@ -34,26 +33,19 @@ export function SeenCardsBar({
           Undo last seen
         </button>
       </div>
-      <div className={`seen-cards-row ${disabled ? 'seen-cards-row--disabled' : ''}`}>
+      <div className={`rank-grid seen-cards-row ${disabled ? 'seen-cards-row--disabled' : ''}`}>
         {RANKS.map((rank) => {
           const count = seenRankCounts[rank];
-          const hiLo = hiLoValue(rank);
           return (
             <button
               key={rank}
               type="button"
-              className={`seen-card-btn hi-lo-${hiLo > 0 ? 'low' : hiLo < 0 ? 'high' : 'neutral'}`}
+              className={`rank-btn ${rank === 'A' ? 'rank-ace' : isTen(rank) ? 'rank-ten' : ''}`}
               onClick={() => onMarkSeen(rank)}
               disabled={disabled}
-              title={
-                hiLo > 0
-                  ? `Mark ${rank} as seen (+1 to running count)`
-                  : hiLo < 0
-                    ? `Mark ${rank} as seen (-1 to running count)`
-                    : `Mark ${rank} as seen (neutral)`
-              }
+              title={`Mark ${rank} as seen`}
             >
-              <span className="seen-card-rank">{rank}</span>
+              {rank}
               {count > 0 && <span className="seen-card-count">{count}</span>}
             </button>
           );
@@ -61,4 +53,8 @@ export function SeenCardsBar({
       </div>
     </section>
   );
+}
+
+function isTen(rank: Rank): boolean {
+  return rank === '10' || rank === 'J' || rank === 'Q' || rank === 'K';
 }
