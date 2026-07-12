@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { type Card, type Rank, type Suit, SUITS } from './lib/cards';
+import { type Card, type Rank, type Suit, SUITS, RANKS } from './lib/cards';
 import { analyzeHand } from './lib/handEvaluation';
 import { getInsuranceAdvice, getStrategy } from './lib/deviations';
 import {
@@ -32,6 +32,7 @@ import { StrategyPanel } from './components/StrategyPanel';
 import { CountPanel } from './components/CountPanel';
 import { InsurancePanel } from './components/InsurancePanel';
 import { KeyboardHints } from './components/KeyboardHints';
+import { SeenCardsBar } from './components/SeenCardsBar';
 import './App.css';
 
 function randomSuit(): Suit {
@@ -54,6 +55,7 @@ export default function App() {
   const [deviationsEnabled, setDeviationsEnabled] = useState(true);
   const [trackCount, setTrackCount] = useState(true);
   const [pickerMode, setPickerMode] = useState<PickerMode>('dealer');
+  const [seenCardsLog, setSeenCardsLog] = useState<Rank[]>([]);
 
   const activeHand = playerHands[activeHandIndex] ?? null;
   const activeCards = activeHand?.cards ?? [];
@@ -127,6 +129,28 @@ export default function App() {
     },
     [trackCount],
   );
+
+  const markCardSeen = useCallback(
+    (rank: Rank) => {
+      trackCard(rank);
+      setSeenCardsLog((prev) => [...prev, rank]);
+    },
+    [trackCard],
+  );
+
+  const undoLastSeen = useCallback(() => {
+    setSeenCardsLog((prev) => {
+      if (prev.length === 0) return prev;
+      untrackCard(prev[prev.length - 1]);
+      return prev.slice(0, -1);
+    });
+  }, [untrackCard]);
+
+  const seenRankCounts = useMemo(() => {
+    const counts = Object.fromEntries(RANKS.map((r) => [r, 0])) as Record<Rank, number>;
+    for (const rank of seenCardsLog) counts[rank]++;
+    return counts;
+  }, [seenCardsLog]);
 
   const updateHands = useCallback((updater: (hands: PlayerHand[]) => PlayerHand[]) => {
     setPlayerHands((prev) => updater(prev).map(refreshHandStatus));
@@ -240,6 +264,7 @@ export default function App() {
 
   const newShoe = useCallback(() => {
     setCountState(resetCount(countState.decks));
+    setSeenCardsLog([]);
     newHand();
   }, [countState.decks, newHand]);
 
@@ -414,6 +439,14 @@ export default function App() {
         </div>
       </header>
 
+      <SeenCardsBar
+        onMarkSeen={markCardSeen}
+        onUndoLastSeen={undoLastSeen}
+        seenRankCounts={seenRankCounts}
+        canUndo={seenCardsLog.length > 0}
+        disabled={!trackCount}
+      />
+
       <main className="main">
         <section className="panel play-panel">
           <div className="hands">
@@ -551,6 +584,7 @@ export default function App() {
             <h3>How to use</h3>
             <ol>
               <li>Set deck count to match your online table.</li>
+              <li>Use the <strong>Cards pulled from shoe</strong> row for burn cards and other players.</li>
               <li>Enter dealer upcard, then your cards (keyboard or clicks).</li>
               <li>Press <kbd>P</kbd> to split, <kbd>Space</kbd> to stand / next hand.</li>
               <li>Follow the recommendation — gold border means a count deviation.</li>
